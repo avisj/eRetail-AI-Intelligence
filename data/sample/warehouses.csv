@@ -1,0 +1,6 @@
+warehouse_id,warehouse_name,city,state,country,capacity_units
+WH_NORTH_01,Northern Regional Fulfillment Center,Chicago,IL,USA,500000
+WH_SOUTH_01,Dallas Distribution Hub,Dallas,TX,USA,650000
+WH_WEST_01,Pacific Gateway Warehouse,Reno,NV,USA,400000
+WH_EAST_01,Atlantic Crossdock Facility,Allentown,PA,USA,600000
+WH_CENTRAL_01,Midwest Central Logistics,Indianapolis,IN,USA,800000

@@ -1,0 +1,21 @@
+supplier_id,supplier_name,average_lead_time_days,minimum_order_quantity
+SUPP_001,Apex Global Manufacturing,21,50
+SUPP_002,Titan Electronics Ltd,21,100
+SUPP_003,Summit Apparel Group,5,500
+SUPP_004,OmniTextiles Corp,21,100
+SUPP_005,Vanguard Home Goods,7,50
+SUPP_006,Pinnacle Beauty Labs,10,200
+SUPP_007,Aura Cosmetic Works,14,200
+SUPP_008,Zenith Sporting Goods,10,50
+SUPP_009,Prime Logistics Supply,14,25
+SUPP_010,Pacific Rim Imports,21,100
+SUPP_011,Beacon Foods & Organics,21,50
+SUPP_012,Frontier Hardware Co,35,200
+SUPP_013,Starlight Consumer Tech,21,25
+SUPP_014,Velocity Gear Inc,10,25
+SUPP_015,Heritage Leatherworks,7,100
+SUPP_016,EcoFiber Solutions,14,500
+SUPP_017,Alpine Sports Equipment,10,50
+SUPP_018,Precision Electronics Inc,10,25
+SUPP_019,Horizon Nutrition Ltd,7,50
+SUPP_020,Atlas Global Brands,7,100
