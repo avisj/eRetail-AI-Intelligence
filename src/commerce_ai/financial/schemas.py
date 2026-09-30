@@ -1232,3 +1232,534 @@ class ProfitabilityAttributionResult(BaseModel):
 
     def to_dict(self) -> Dict[str, Any]:
         return self.model_dump()
+
+
+# =============================================================================
+# Phase 6D: Cost Completeness & Operational Economics Schemas
+# =============================================================================
+
+
+class CostGrain(str, Enum):
+    """Grain / level of granularity at which an operational cost is naturally incurred or captured."""
+
+    UNIT = "UNIT"
+    TRANSACTION = "TRANSACTION"
+    ORDER = "ORDER"
+    RETURN_EVENT = "RETURN_EVENT"
+    UNKNOWN = "UNKNOWN"
+
+
+class CostCompletenessStatus(str, Enum):
+    """Categorical classification of cost completeness based on required components."""
+
+    COMPLETE = "COMPLETE"
+    PARTIALLY_COMPLETE = "PARTIALLY_COMPLETE"
+    INSUFFICIENT_DATA = "INSUFFICIENT_DATA"
+
+
+class OperationalEconomicsStatus(str, Enum):
+    """Calculation health and calculability state for operational economics."""
+
+    COMPLETE = "COMPLETE"
+    PARTIALLY_CALCULABLE = "PARTIALLY_CALCULABLE"
+    INSUFFICIENT_COST_DATA = "INSUFFICIENT_COST_DATA"
+    INVALID_INPUT = "INVALID_INPUT"
+
+
+class OperationalCostDetail(BaseModel):
+    """Detailed metadata and audit trail for a single operational cost component."""
+
+    model_config = ConfigDict(extra="allow")
+
+    component: CostComponent = Field(..., description="Cost component type")
+    amount: Optional[float] = Field(default=None, description="Monetary cost amount in currency units")
+    unit_amount: Optional[float] = Field(default=None, description="Per-unit allocated cost amount")
+    currency: str = Field(default="USD", description="Currency denomination")
+    source_type: CostSourceType = Field(..., description="Cost source provenance")
+    availability_status: CostComponentStatus = Field(..., description="Component availability status")
+    cost_grain: CostGrain = Field(default=CostGrain.UNKNOWN, description="Natural grain of cost incurrence")
+    is_estimated: bool = Field(default=False, description="True if derived from catalog or standard reference tables")
+    is_assumed: bool = Field(default=False, description="True if derived from configurable operational assumptions")
+    included_in_known_contribution: bool = Field(
+        default=False, description="True if included in known contribution margin calculation"
+    )
+    included_in_final_contribution: bool = Field(
+        default=False, description="True if component satisfies criteria for final contribution margin"
+    )
+    source_reference: Optional[str] = Field(default=None, description="Field, table, or assumption reference name")
+    description: str = Field(default="", description="Audit description of how cost was determined")
+
+    def to_dict(self) -> Dict[str, Any]:
+        d = self.model_dump()
+        if d.get("amount") is not None:
+            d["amount"] = round(float(d["amount"]), 4)
+        if d.get("unit_amount") is not None:
+            d["unit_amount"] = round(float(d["unit_amount"]), 4)
+        return d
+
+
+class CostAssumptionsConfig(BaseModel):
+    """Configurable operational cost assumptions. None of these are hardcoded."""
+
+    model_config = ConfigDict(extra="allow")
+
+    # Shipping assumptions
+    shipping_cost_per_order: Optional[float] = Field(
+        default=None, ge=0.0, description="Assumed flat outbound shipping fee per sales order"
+    )
+    shipping_cost_per_unit: Optional[float] = Field(
+        default=None, ge=0.0, description="Assumed outbound shipping cost per unit shipped"
+    )
+    shipping_pct_of_net_revenue: Optional[float] = Field(
+        default=None, ge=0.0, le=1.0, description="Assumed shipping cost as percentage of net revenue"
+    )
+    shipping_cost_by_channel: Dict[str, float] = Field(
+        default_factory=dict, description="Assumed flat shipping fee keyed by channel_id"
+    )
+
+    # Payment processing assumptions
+    payment_processing_rate: Optional[float] = Field(
+        default=None, ge=0.0, le=1.0, description="Assumed merchant payment gateway fee rate (e.g. 0.029 for 2.9%)"
+    )
+    payment_processing_fixed_per_order: Optional[float] = Field(
+        default=None, ge=0.0, description="Assumed fixed transaction fee per sales order (e.g. 0.30)"
+    )
+    payment_rate_by_channel: Dict[str, float] = Field(
+        default_factory=dict, description="Assumed payment fee rate keyed by channel_id"
+    )
+    payment_fixed_by_channel: Dict[str, float] = Field(
+        default_factory=dict, description="Assumed fixed transaction fee keyed by channel_id"
+    )
+
+    # Packaging assumptions
+    packaging_cost_per_order: Optional[float] = Field(
+        default=None, ge=0.0, description="Assumed packaging box/materials cost per sales order"
+    )
+    packaging_cost_per_unit: Optional[float] = Field(
+        default=None, ge=0.0, description="Assumed packaging materials cost per unit"
+    )
+
+    # Warehouse handling assumptions
+    warehouse_handling_cost_per_order: Optional[float] = Field(
+        default=None, ge=0.0, description="Assumed pick/pack labor cost per sales order"
+    )
+    warehouse_handling_cost_per_unit: Optional[float] = Field(
+        default=None, ge=0.0, description="Assumed pick/pack labor cost per unit"
+    )
+    warehouse_handling_by_facility: Dict[str, float] = Field(
+        default_factory=dict, description="Assumed handling fee keyed by warehouse_id"
+    )
+
+    # Return processing assumptions
+    return_cost_per_returned_unit: Optional[float] = Field(
+        default=None, ge=0.0, description="Assumed reverse logistics & inspection fee per returned unit"
+    )
+    return_cost_per_return_event: Optional[float] = Field(
+        default=None, ge=0.0, description="Assumed fixed return handling fee per return event"
+    )
+
+    # Other variable cost assumptions
+    other_variable_cost_per_unit: Optional[float] = Field(
+        default=None, ge=0.0, description="Assumed other miscellaneous variable cost per unit"
+    )
+    other_variable_cost_pct: Optional[float] = Field(
+        default=None, ge=0.0, le=1.0, description="Assumed other variable cost as % of net revenue"
+    )
+
+    @field_validator(
+        "payment_processing_rate",
+        "shipping_pct_of_net_revenue",
+        "other_variable_cost_pct",
+        mode="before",
+    )
+    @classmethod
+    def validate_rate_bounds(cls, v: Any) -> Any:
+        if v is not None:
+            v_float = float(v)
+            if v_float < 0.0 or v_float > 1.0:
+                raise ValueError(f"Rate must be between 0.0 and 1.0, got {v_float}")
+            return v_float
+        return v
+
+    def to_dict(self) -> Dict[str, Any]:
+        return self.model_dump()
+
+
+class OperationalEconomicsConfig(BaseModel):
+    """Configuration governing required cost components, completeness policy, and assumption models."""
+
+    model_config = ConfigDict(extra="allow")
+
+    required_cost_components: List[CostComponent] = Field(
+        default_factory=lambda: [
+            CostComponent.PRODUCT_COST,
+            CostComponent.SHIPPING_COST,
+            CostComponent.PAYMENT_PROCESSING_COST,
+            CostComponent.PACKAGING_COST,
+            CostComponent.WAREHOUSE_HANDLING_COST,
+            CostComponent.RETURN_PROCESSING_COST,
+        ],
+        description="List of cost components strictly required for 100% cost completeness",
+    )
+    allow_estimated_costs_for_completeness: bool = Field(
+        default=True,
+        description="If True, CATALOG_ESTIMATE (e.g. standard product cost from catalog) counts as available",
+    )
+    allow_assumed_costs_for_completeness: bool = Field(
+        default=False,
+        description="If True, CONFIGURED_ASSUMPTION counts as available for completeness. Strict default is False.",
+    )
+    strict_source_only: bool = Field(
+        default=False,
+        description="If True, only observed SOURCE_DATA satisfies completeness. Overrides allow_estimated.",
+    )
+    min_completeness_threshold: float = Field(
+        default=100.0,
+        ge=0.0,
+        le=100.0,
+        description="Minimum completeness percentage required to populate final contribution margin",
+    )
+    assumptions: CostAssumptionsConfig = Field(
+        default_factory=CostAssumptionsConfig,
+        description="Configurable operational cost assumptions",
+    )
+    as_of_date: Optional[str] = Field(
+        default=None,
+        description="Point-in-time filter date (YYYY-MM-DD); events after this date are excluded",
+    )
+    default_currency: str = Field(
+        default="USD",
+        description="Expected currency denomination. Mixed currencies will be flagged or segregated.",
+    )
+    order_cost_allocation_method: str = Field(
+        default="NET_REVENUE",
+        description="Method to allocate order-level costs to line items: NET_REVENUE, QUANTITY, or EQUAL",
+    )
+
+    def to_dict(self) -> Dict[str, Any]:
+        return self.model_dump()
+
+
+class CostCompletenessReport(BaseModel):
+    """Comprehensive cost completeness audit report."""
+
+    model_config = ConfigDict(extra="allow")
+
+    completeness_status: CostCompletenessStatus = Field(
+        ..., description="Overall cost completeness state: COMPLETE, PARTIALLY_COMPLETE, INSUFFICIENT_DATA"
+    )
+    completeness_pct: float = Field(
+        default=0.0, ge=0.0, le=100.0, description="Percentage of required components available"
+    )
+    total_required_components: int = Field(default=0, ge=0, description="Number of required cost components")
+    available_required_components: int = Field(default=0, ge=0, description="Count of required components available")
+    missing_required_components: int = Field(default=0, ge=0, description="Count of required components missing")
+    required_components: List[str] = Field(default_factory=list, description="Names of required components")
+    available_components: List[str] = Field(default_factory=list, description="Names of available components")
+    unavailable_components: List[str] = Field(default_factory=list, description="Names of missing components")
+    source_components: List[str] = Field(default_factory=list, description="Components sourced from observed data")
+    estimated_components: List[str] = Field(default_factory=list, description="Components derived from catalog estimates")
+    assumed_components: List[str] = Field(default_factory=list, description="Components derived from assumptions")
+    audit_notes: List[str] = Field(default_factory=list, description="Audit notes and diagnostic messages")
+
+    def to_dict(self) -> Dict[str, Any]:
+        d = self.model_dump()
+        d["completeness_pct"] = round(float(d["completeness_pct"]), 2)
+        return d
+
+
+class OperationalEconomicsRecord(BaseModel):
+    """Deterministic transaction-level operational economics record."""
+
+    model_config = ConfigDict(extra="allow")
+
+    record_id: str = Field(..., description="Unique deterministic record ID (hash of keys)")
+    transaction_id: str = Field(..., description="Order-line sales transaction ID")
+    order_id: str = Field(..., description="Sales order identifier")
+    order_date: str = Field(..., description="Sales order date (YYYY-MM-DD)")
+    sku_id: str = Field(..., description="Product SKU ID")
+    warehouse_id: str = Field(..., description="Fulfillment facility ID")
+    channel_id: str = Field(..., description="Sales channel ID")
+    currency: str = Field(default="USD", description="Currency denomination")
+
+    # Volume and pricing
+    quantity: Optional[int] = Field(default=None, description="Observed units sold")
+    unit_price: Optional[float] = Field(default=None, description="Observed unit selling price")
+    gross_revenue: Optional[float] = Field(default=None, description="Gross revenue: quantity * unit_price")
+    discount: Optional[float] = Field(default=None, description="Promotional discount applied")
+    net_revenue: Optional[float] = Field(default=None, description="Net realized revenue: gross_revenue - discount")
+
+    # Product economics
+    unit_product_cost: Optional[float] = Field(default=None, description="Standard procurement unit cost")
+    product_cost: Optional[float] = Field(default=None, description="Total COGS: quantity * unit_product_cost")
+    gross_margin: Optional[float] = Field(default=None, description="Gross commercial margin: net_revenue - product_cost")
+    gross_margin_pct: Optional[float] = Field(default=None, description="Gross margin %: gross_margin / net_revenue")
+
+    # Operational cost lines
+    shipping_cost: Optional[float] = Field(default=None, description="Outbound shipping cost allocated to line")
+    payment_processing_cost: Optional[float] = Field(default=None, description="Payment gateway transaction fee allocated to line")
+    packaging_cost: Optional[float] = Field(default=None, description="Packaging materials cost allocated to line")
+    warehouse_handling_cost: Optional[float] = Field(default=None, description="Warehouse pick/pack labor cost allocated to line")
+    return_processing_cost: Optional[float] = Field(default=None, description="Return processing & inspection fee")
+    other_variable_cost: Optional[float] = Field(default=None, description="Other miscellaneous variable costs")
+    total_known_variable_cost: float = Field(
+        default=0.0, ge=0.0, description="Sum of all currently available variable cost components"
+    )
+
+    # Contribution economics
+    known_contribution_margin: Optional[float] = Field(
+        default=None, description="Net revenue - product cost - total known variable costs"
+    )
+    known_contribution_margin_pct: Optional[float] = Field(
+        default=None, description="Known contribution margin as % of net revenue"
+    )
+    final_contribution_margin: Optional[float] = Field(
+        default=None,
+        description="Final contribution margin; populated ONLY when all required cost components meet completeness policy",
+    )
+    final_contribution_margin_pct: Optional[float] = Field(
+        default=None,
+        description="Final contribution margin %; populated ONLY when all required cost components meet completeness policy",
+    )
+    final_contribution_margin_status: ContributionMarginStatus = Field(
+        default=ContributionMarginStatus.INSUFFICIENT_COST_DATA,
+        description="Calculability state: COMPLETE, PARTIALLY_CALCULABLE, or INSUFFICIENT_COST_DATA",
+    )
+
+    # Per-unit metrics
+    net_revenue_per_unit: Optional[float] = Field(default=None, description="Net revenue per unit")
+    gross_margin_per_unit: Optional[float] = Field(default=None, description="Gross margin per unit")
+    variable_cost_per_unit: Optional[float] = Field(default=None, description="Known variable cost per unit")
+    contribution_margin_per_unit: Optional[float] = Field(default=None, description="Contribution margin per unit")
+
+    # Quality and provenance
+    cost_completeness_pct: float = Field(
+        default=0.0, ge=0.0, le=100.0, description="Percentage of required cost components available"
+    )
+    cost_completeness_status: CostCompletenessStatus = Field(
+        default=CostCompletenessStatus.INSUFFICIENT_DATA,
+        description="Cost completeness state: COMPLETE, PARTIALLY_COMPLETE, or INSUFFICIENT_DATA",
+    )
+    economics_status: OperationalEconomicsStatus = Field(
+        ..., description="Overall operational economics status"
+    )
+    status_rationale: str = Field(..., description="Deterministic explanation of status and cost coverage")
+    cost_details: Dict[str, OperationalCostDetail] = Field(
+        default_factory=dict, description="Detailed per-component metadata and traceability"
+    )
+
+    def to_dict(self) -> Dict[str, Any]:
+        d = self.model_dump()
+        for k in [
+            "unit_price", "gross_revenue", "discount", "net_revenue",
+            "unit_product_cost", "product_cost", "gross_margin", "gross_margin_pct",
+            "shipping_cost", "payment_processing_cost", "packaging_cost",
+            "warehouse_handling_cost", "return_processing_cost", "other_variable_cost",
+            "total_known_variable_cost", "known_contribution_margin", "known_contribution_margin_pct",
+            "final_contribution_margin", "final_contribution_margin_pct",
+            "net_revenue_per_unit", "gross_margin_per_unit", "variable_cost_per_unit", "contribution_margin_per_unit",
+            "cost_completeness_pct",
+        ]:
+            if d.get(k) is not None:
+                d[k] = round(float(d[k]), 4 if "pct" in k else 2)
+        return d
+
+
+class OrderOperationalEconomicsRecord(BaseModel):
+    """Deterministic order-level operational economics record aggregating without multi-line double-counting."""
+
+    model_config = ConfigDict(extra="allow")
+
+    order_id: str = Field(..., description="Sales order identifier")
+    order_date: str = Field(..., description="Sales order date (YYYY-MM-DD)")
+    channel_id: str = Field(..., description="Sales channel ID")
+    warehouse_id: Optional[str] = Field(default=None, description="Fulfillment facility ID (or primary facility)")
+    currency: str = Field(default="USD", description="Currency denomination")
+
+    # Order volumes
+    line_count: int = Field(default=1, ge=1, description="Number of order line items in sales order")
+    total_quantity: int = Field(default=0, ge=0, description="Total units across all lines")
+
+    # Order revenue
+    gross_revenue: Optional[float] = Field(default=None, description="Total order gross revenue")
+    discount: Optional[float] = Field(default=None, description="Total order promotional discounts")
+    net_revenue: Optional[float] = Field(default=None, description="Total order net revenue")
+
+    # Order product economics
+    product_cost: Optional[float] = Field(default=None, description="Total order COGS across all lines")
+    gross_margin: Optional[float] = Field(default=None, description="Total order gross margin")
+    gross_margin_pct: Optional[float] = Field(default=None, description="Order gross margin %")
+
+    # True order-level operational costs (un-allocated, exact)
+    shipping_cost: Optional[float] = Field(default=None, description="Total outbound order shipping cost")
+    payment_processing_cost: Optional[float] = Field(default=None, description="Total payment processing fee for order")
+    packaging_cost: Optional[float] = Field(default=None, description="Total packaging materials cost for order")
+    warehouse_handling_cost: Optional[float] = Field(default=None, description="Total warehouse handling cost for order")
+    return_processing_cost: Optional[float] = Field(default=None, description="Total return processing cost for order")
+    other_variable_cost: Optional[float] = Field(default=None, description="Total other variable costs for order")
+    total_known_variable_cost: float = Field(
+        default=0.0, ge=0.0, description="Sum of all available variable cost components for order"
+    )
+
+    # Order contribution economics
+    known_contribution_margin: Optional[float] = Field(default=None, description="Order known contribution margin")
+    known_contribution_margin_pct: Optional[float] = Field(default=None, description="Order known contribution margin %")
+    final_contribution_margin: Optional[float] = Field(default=None, description="Order final contribution margin")
+    final_contribution_margin_pct: Optional[float] = Field(default=None, description="Order final contribution margin %")
+    final_contribution_margin_status: ContributionMarginStatus = Field(
+        default=ContributionMarginStatus.INSUFFICIENT_COST_DATA, description="Calculability state of order contribution margin"
+    )
+
+    # Completeness and quality
+    cost_completeness_pct: float = Field(
+        default=0.0, ge=0.0, le=100.0, description="Percentage of required components available at order level"
+    )
+    cost_completeness_status: CostCompletenessStatus = Field(
+        default=CostCompletenessStatus.INSUFFICIENT_DATA, description="Order cost completeness status"
+    )
+    economics_status: OperationalEconomicsStatus = Field(
+        ..., description="Overall order operational economics status"
+    )
+    cost_details: Dict[str, OperationalCostDetail] = Field(
+        default_factory=dict, description="Detailed per-component metadata and traceability for order"
+    )
+
+    def to_dict(self) -> Dict[str, Any]:
+        d = self.model_dump()
+        for k in [
+            "gross_revenue", "discount", "net_revenue", "product_cost", "gross_margin", "gross_margin_pct",
+            "shipping_cost", "payment_processing_cost", "packaging_cost", "warehouse_handling_cost",
+            "return_processing_cost", "other_variable_cost", "total_known_variable_cost",
+            "known_contribution_margin", "known_contribution_margin_pct",
+            "final_contribution_margin", "final_contribution_margin_pct", "cost_completeness_pct",
+        ]:
+            if d.get(k) is not None:
+                d[k] = round(float(d[k]), 4 if "pct" in k else 2)
+        return d
+
+
+class OperationalEconomicsSegment(BaseModel):
+    """Aggregated operational economics metrics for an analytical dimension or slice."""
+
+    model_config = ConfigDict(extra="allow")
+
+    dimension: str = Field(..., description="Dimension: SKU, CATEGORY, BRAND, CHANNEL, WAREHOUSE, etc.")
+    segment_key: str = Field(..., description="Segment identifier value")
+    record_count: int = Field(default=0, ge=0, description="Total order-line records in segment")
+    order_count: int = Field(default=0, ge=0, description="Distinct sales orders in segment")
+    total_units: int = Field(default=0, ge=0, description="Total units sold in segment")
+
+    # Revenue metrics
+    gross_revenue: Optional[float] = Field(default=None, description="Sum of gross revenue")
+    discount: Optional[float] = Field(default=None, description="Sum of promotional discounts")
+    net_revenue: Optional[float] = Field(default=None, description="Sum of net revenue")
+
+    # Product economics
+    product_cost: Optional[float] = Field(default=None, description="Sum of product costs")
+    gross_margin: Optional[float] = Field(default=None, description="Sum of gross margin")
+    gross_margin_pct: Optional[float] = Field(default=None, description="Aggregate gross margin %")
+
+    # Variable costs
+    shipping_cost: Optional[float] = Field(default=None, description="Sum of allocated shipping costs")
+    payment_processing_cost: Optional[float] = Field(default=None, description="Sum of allocated payment fees")
+    packaging_cost: Optional[float] = Field(default=None, description="Sum of packaging costs")
+    warehouse_handling_cost: Optional[float] = Field(default=None, description="Sum of handling costs")
+    return_processing_cost: Optional[float] = Field(default=None, description="Sum of return costs")
+    other_variable_cost: Optional[float] = Field(default=None, description="Sum of other variable costs")
+    total_known_variable_cost: float = Field(default=0.0, ge=0.0, description="Sum of total known variable costs")
+
+    # Contribution economics
+    known_contribution_margin: Optional[float] = Field(default=None, description="Sum of known contribution margin")
+    known_contribution_margin_pct: Optional[float] = Field(default=None, description="Known contribution margin %")
+    final_contribution_margin: Optional[float] = Field(default=None, description="Sum of final contribution margin")
+    final_contribution_margin_pct: Optional[float] = Field(default=None, description="Final contribution margin %")
+    final_contribution_margin_status: ContributionMarginStatus = Field(
+        default=ContributionMarginStatus.INSUFFICIENT_COST_DATA, description="Calculability state of segment contribution margin"
+    )
+
+    # Completeness breakdown
+    avg_cost_completeness_pct: float = Field(default=0.0, ge=0.0, le=100.0, description="Average completeness % across records")
+    complete_records_count: int = Field(default=0, ge=0, description="Count of complete records")
+    partially_complete_records_count: int = Field(default=0, ge=0, description="Count of partially complete records")
+    insufficient_records_count: int = Field(default=0, ge=0, description="Count of insufficient data records")
+
+    def to_dict(self) -> Dict[str, Any]:
+        d = self.model_dump()
+        for k in [
+            "gross_revenue", "discount", "net_revenue", "product_cost", "gross_margin", "gross_margin_pct",
+            "shipping_cost", "payment_processing_cost", "packaging_cost", "warehouse_handling_cost",
+            "return_processing_cost", "other_variable_cost", "total_known_variable_cost",
+            "known_contribution_margin", "known_contribution_margin_pct",
+            "final_contribution_margin", "final_contribution_margin_pct", "avg_cost_completeness_pct",
+        ]:
+            if d.get(k) is not None:
+                d[k] = round(float(d[k]), 4 if "pct" in k else 2)
+        return d
+
+
+class OperationalEconomicsSummary(BaseModel):
+    """Network-level operational economics executive portfolio summary."""
+
+    model_config = ConfigDict(extra="allow")
+
+    total_records: int = Field(default=0, ge=0, description="Total order-line records analyzed")
+    total_orders: int = Field(default=0, ge=0, description="Total distinct sales orders")
+    total_units: int = Field(default=0, ge=0, description="Total units sold")
+
+    # Portfolio revenues
+    gross_revenue: float = Field(default=0.0, description="Total gross revenue ($)")
+    discount: float = Field(default=0.0, description="Total promotional discounts ($)")
+    net_revenue: float = Field(default=0.0, description="Total net realized revenue ($)")
+
+    # Portfolio product cost and gross margin
+    product_cost: float = Field(default=0.0, description="Total procurement product cost ($)")
+    gross_margin: float = Field(default=0.0, description="Total commercial gross margin ($)")
+    gross_margin_pct: Optional[float] = Field(default=None, description="Overall gross margin %")
+
+    # Portfolio operational costs
+    shipping_cost: float = Field(default=0.0, description="Total shipping expenses ($)")
+    payment_processing_cost: float = Field(default=0.0, description="Total payment processing fees ($)")
+    packaging_cost: float = Field(default=0.0, description="Total packaging materials cost ($)")
+    warehouse_handling_cost: float = Field(default=0.0, description="Total warehouse labor handling cost ($)")
+    return_processing_cost: float = Field(default=0.0, description="Total return processing cost ($)")
+    other_variable_cost: float = Field(default=0.0, description="Total other variable expenses ($)")
+    total_known_variable_cost: float = Field(default=0.0, description="Total known variable operational costs ($)")
+
+    # Portfolio contribution economics
+    known_contribution_margin: float = Field(default=0.0, description="Total known contribution margin ($)")
+    known_contribution_margin_pct: Optional[float] = Field(default=None, description="Known contribution margin %")
+    final_contribution_margin: Optional[float] = Field(
+        default=None, description="Final contribution margin ($); None if any required cost is unavailable"
+    )
+    final_contribution_margin_pct: Optional[float] = Field(
+        default=None, description="Final contribution margin %; None if any required cost is unavailable"
+    )
+    final_contribution_margin_status: ContributionMarginStatus = Field(
+        default=ContributionMarginStatus.INSUFFICIENT_COST_DATA, description="Calculability state of portfolio contribution margin"
+    )
+
+    # Auditing & metadata
+    cost_completeness_report: CostCompletenessReport = Field(
+        ..., description="Complete audit report on cost component availability and provenance"
+    )
+    cost_details: Dict[str, OperationalCostDetail] = Field(
+        default_factory=dict, description="Detailed per-component metadata and traceability"
+    )
+    currency: str = Field(default="USD", description="Currency denomination")
+    as_of_date: Optional[str] = Field(default=None, description="Point-in-time filter applied if any")
+    generated_at: str = Field(..., description="ISO 8601 generation timestamp")
+
+    def to_dict(self) -> Dict[str, Any]:
+        d = self.model_dump()
+        for k in [
+            "gross_revenue", "discount", "net_revenue", "product_cost", "gross_margin", "gross_margin_pct",
+            "shipping_cost", "payment_processing_cost", "packaging_cost", "warehouse_handling_cost",
+            "return_processing_cost", "other_variable_cost", "total_known_variable_cost",
+            "known_contribution_margin", "known_contribution_margin_pct",
+        ]:
+            d[k] = round(float(d[k]), 4 if "pct" in k else 2)
+        if d.get("final_contribution_margin") is not None:
+            d["final_contribution_margin"] = round(float(d["final_contribution_margin"]), 2)
+        if d.get("final_contribution_margin_pct") is not None:
+            d["final_contribution_margin_pct"] = round(float(d["final_contribution_margin_pct"]), 4)
+        return d

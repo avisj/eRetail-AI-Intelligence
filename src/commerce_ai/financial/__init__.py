@@ -61,6 +61,18 @@ from commerce_ai.financial.schemas import (
     ProfitabilityAttributionRecord,
     ProfitabilityAttributionResult,
     SKUProfitabilityProfile,
+    # Phase 6D Schemas
+    CostAssumptionsConfig,
+    CostCompletenessReport,
+    CostCompletenessStatus,
+    CostGrain,
+    OperationalCostDetail,
+    OperationalEconomicsConfig,
+    OperationalEconomicsRecord,
+    OperationalEconomicsSegment,
+    OperationalEconomicsStatus,
+    OperationalEconomicsSummary,
+    OrderOperationalEconomicsRecord,
 )
 from commerce_ai.financial.revenue_margin import (
     aggregate_financial_dimension,
@@ -112,6 +124,20 @@ from commerce_ai.financial.attribution import (
 from commerce_ai.financial.service import (
     FinancialIntelligenceService,
     UnitEconomicsService,
+    OperationalEconomicsService,
+)
+from commerce_ai.financial.operational_economics import (
+    aggregate_operational_dimension,
+    aggregate_operational_time_series,
+    calculate_cost_completeness_report,
+    calculate_operational_economics_record,
+    compute_operational_economics_dataframe,
+    compute_order_operational_economics_dataframe,
+    generate_operational_order_id,
+    generate_operational_record_id,
+    generate_operational_segment_id,
+    resolve_transaction_operational_costs,
+    summarize_operational_portfolio,
 )
 
 __all__ = [
@@ -156,6 +182,18 @@ __all__ = [
     "ProfitabilityAttributionRecord",
     "ProfitabilityAttributionResult",
     "SKUProfitabilityProfile",
+    # Schemas (Phase 6D)
+    "CostAssumptionsConfig",
+    "CostCompletenessReport",
+    "CostCompletenessStatus",
+    "CostGrain",
+    "OperationalCostDetail",
+    "OperationalEconomicsConfig",
+    "OperationalEconomicsRecord",
+    "OperationalEconomicsSegment",
+    "OperationalEconomicsStatus",
+    "OperationalEconomicsSummary",
+    "OrderOperationalEconomicsRecord",
     # Functions (Phase 6A)
     "aggregate_financial_dimension",
     "aggregate_time_series",
@@ -193,8 +231,21 @@ __all__ = [
     "compute_dimensional_profitability_attribution",
     "compute_sku_profitability_profiles",
     "compute_temporal_profitability_attribution",
+    # Functions (Phase 6D)
+    "aggregate_operational_dimension",
+    "aggregate_operational_time_series",
+    "calculate_cost_completeness_report",
+    "calculate_operational_economics_record",
+    "compute_operational_economics_dataframe",
+    "compute_order_operational_economics_dataframe",
+    "generate_operational_order_id",
+    "generate_operational_record_id",
+    "generate_operational_segment_id",
+    "resolve_transaction_operational_costs",
+    "summarize_operational_portfolio",
     # Services
     "FinancialIntelligenceService",
     "UnitEconomicsService",
     "ProfitabilityAttributionService",
+    "OperationalEconomicsService",
 ]

@@ -434,3 +434,4 @@ class UnitEconomicsService:
 
 
 from commerce_ai.financial.attribution import ProfitabilityAttributionService
+from commerce_ai.financial.operational_service import OperationalEconomicsService
