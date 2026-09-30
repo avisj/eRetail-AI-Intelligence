@@ -431,3 +431,6 @@ class UnitEconomicsService:
             cost_model_summary=cost_summary,
             records=records,
         )
+
+
+from commerce_ai.financial.attribution import ProfitabilityAttributionService

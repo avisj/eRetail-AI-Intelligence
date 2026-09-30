@@ -1,4 +1,4 @@
-"""Financial Intelligence & Unit Economics Module (Phases 6A & 6B).
+"""Financial Intelligence, Unit Economics & Profitability Attribution (Phases 6A, 6B & 6C).
 
 Provides deterministic, factual financial analytics for eRetail transactions:
 - Revenue calculation and reconciliation (gross revenue, discounts, net revenue, source variance)
@@ -12,6 +12,11 @@ Provides deterministic, factual financial analytics for eRetail transactions:
 - Neutral analytical rankings & descriptive margin erosion analysis
 - Point-in-time anti-leakage filtering
 - Comprehensive data quality auditing
+- Profitability attribution and contribution gap analysis (Phase 6C)
+- Margin concentration tiers and ordered cumulative contribution curves (Phase 6C)
+- Promotional discount impact analysis and bucket distributions (Phase 6C)
+- Margin driver classifications and negative/low margin root-cause flagging (Phase 6C)
+- Executive commercial portfolio margin waterfall (Phase 6C)
 """
 
 from commerce_ai.financial.schemas import (
@@ -41,6 +46,21 @@ from commerce_ai.financial.schemas import (
     UnitEconomicsRecord,
     UnitEconomicsResult,
     UnitEconomicsStatus,
+    # Phase 6C Schemas
+    AttributionReasonCode,
+    DiscountBucketMetric,
+    DiscountImpactSummary,
+    MarginConcentrationResult,
+    MarginConcentrationTier,
+    MarginContributionPoint,
+    MarginDriverClassification,
+    MarginDriverSegment,
+    MarginWaterfall,
+    MarginWaterfallStage,
+    ProfitabilityAttributionConfig,
+    ProfitabilityAttributionRecord,
+    ProfitabilityAttributionResult,
+    SKUProfitabilityProfile,
 )
 from commerce_ai.financial.revenue_margin import (
     aggregate_financial_dimension,
@@ -69,7 +89,30 @@ from commerce_ai.financial.unit_economics import (
     generate_unit_economics_segment_id,
     summarize_unit_economics_portfolio,
 )
-from commerce_ai.financial.service import FinancialIntelligenceService, UnitEconomicsService
+from commerce_ai.financial.concentration import (
+    calculate_margin_concentration,
+    calculate_margin_contribution_curve,
+)
+from commerce_ai.financial.discount_analysis import (
+    analyze_discount_buckets,
+    analyze_discount_impact,
+)
+from commerce_ai.financial.margin_drivers import (
+    analyze_negative_and_low_margins,
+    build_margin_waterfall,
+    classify_margin_drivers,
+    evaluate_sku_driver_classifications,
+)
+from commerce_ai.financial.attribution import (
+    ProfitabilityAttributionService,
+    compute_dimensional_profitability_attribution,
+    compute_sku_profitability_profiles,
+    compute_temporal_profitability_attribution,
+)
+from commerce_ai.financial.service import (
+    FinancialIntelligenceService,
+    UnitEconomicsService,
+)
 
 __all__ = [
     # Schemas (Phase 6A)
@@ -98,6 +141,21 @@ __all__ = [
     "UnitEconomicsRecord",
     "UnitEconomicsResult",
     "UnitEconomicsStatus",
+    # Schemas (Phase 6C)
+    "AttributionReasonCode",
+    "DiscountBucketMetric",
+    "DiscountImpactSummary",
+    "MarginConcentrationResult",
+    "MarginConcentrationTier",
+    "MarginContributionPoint",
+    "MarginDriverClassification",
+    "MarginDriverSegment",
+    "MarginWaterfall",
+    "MarginWaterfallStage",
+    "ProfitabilityAttributionConfig",
+    "ProfitabilityAttributionRecord",
+    "ProfitabilityAttributionResult",
+    "SKUProfitabilityProfile",
     # Functions (Phase 6A)
     "aggregate_financial_dimension",
     "aggregate_time_series",
@@ -123,7 +181,20 @@ __all__ = [
     "generate_unit_economics_record_id",
     "generate_unit_economics_segment_id",
     "summarize_unit_economics_portfolio",
+    # Functions & Classes (Phase 6C)
+    "calculate_margin_concentration",
+    "calculate_margin_contribution_curve",
+    "analyze_discount_buckets",
+    "analyze_discount_impact",
+    "analyze_negative_and_low_margins",
+    "build_margin_waterfall",
+    "classify_margin_drivers",
+    "evaluate_sku_driver_classifications",
+    "compute_dimensional_profitability_attribution",
+    "compute_sku_profitability_profiles",
+    "compute_temporal_profitability_attribution",
     # Services
     "FinancialIntelligenceService",
     "UnitEconomicsService",
+    "ProfitabilityAttributionService",
 ]

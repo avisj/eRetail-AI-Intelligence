@@ -578,10 +578,11 @@ def compute_revenue_margin_dataframe(
     df["currency"] = df["currency"].fillna(cfg.default_currency).astype(str).str.strip().str.upper()
 
     # Numeric conversion
-    qty = pd.to_numeric(df.get("quantity"), errors="coerce")
-    unit_price = pd.to_numeric(df.get("unit_price"), errors="coerce")
-    discount = pd.to_numeric(df.get("discount"), errors="coerce")
-    source_rev = pd.to_numeric(df.get("revenue", df.get("source_revenue")), errors="coerce")
+    qty = pd.to_numeric(df["quantity"], errors="coerce") if "quantity" in df.columns else pd.Series(np.nan, index=df.index, dtype=float)
+    unit_price = pd.to_numeric(df["unit_price"], errors="coerce") if "unit_price" in df.columns else pd.Series(np.nan, index=df.index, dtype=float)
+    discount = pd.to_numeric(df["discount"], errors="coerce") if "discount" in df.columns else pd.Series(0.0, index=df.index, dtype=float)
+    rev_col = "revenue" if "revenue" in df.columns else ("source_revenue" if "source_revenue" in df.columns else None)
+    source_rev = pd.to_numeric(df[rev_col], errors="coerce") if rev_col is not None else pd.Series(np.nan, index=df.index, dtype=float)
 
     # Product enrichment for unit_cost, category_id, brand
     unit_cost = None

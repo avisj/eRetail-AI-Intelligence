@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from datetime import date, datetime
 from enum import Enum
-from typing import Any, Dict, List, Optional, Sequence, Union
+from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 import numpy as np
 import pandas as pd
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -792,3 +792,443 @@ class UnitEconomicsResult(BaseModel):
         return self.model_dump()
 
 
+# =====================================================================
+# Phase 6C: Profitability Attribution & Margin Drivers Schemas
+# =====================================================================
+
+
+class MarginDriverClassification(str, Enum):
+    """Deterministic analytical classification of segment margin drivers."""
+
+    HIGH_REVENUE_LOW_MARGIN_SHARE = "HIGH_REVENUE_LOW_MARGIN_SHARE"
+    LOW_REVENUE_HIGH_MARGIN_SHARE = "LOW_REVENUE_HIGH_MARGIN_SHARE"
+    HIGH_DISCOUNT = "HIGH_DISCOUNT"
+    NEGATIVE_MARGIN = "NEGATIVE_MARGIN"
+    LOW_MARGIN = "LOW_MARGIN"
+    HIGH_MARGIN_CONTRIBUTOR = "HIGH_MARGIN_CONTRIBUTOR"
+    HIGH_REVENUE_HIGH_MARGIN = "HIGH_REVENUE_HIGH_MARGIN"
+    LOW_REVENUE_LOW_MARGIN = "LOW_REVENUE_LOW_MARGIN"
+
+
+class AttributionReasonCode(str, Enum):
+    """Factual, descriptive reason codes for segment margin behavior."""
+
+    NEGATIVE_GROSS_MARGIN = "NEGATIVE_GROSS_MARGIN"
+    LOW_GROSS_MARGIN_PERCENT = "LOW_GROSS_MARGIN_PERCENT"
+    HIGH_DISCOUNT = "HIGH_DISCOUNT"
+    LOW_MARGIN_CONTRIBUTION = "LOW_MARGIN_CONTRIBUTION"
+    HIGH_REVENUE_CONTRIBUTION = "HIGH_REVENUE_CONTRIBUTION"
+    CONTRIBUTION_GAP_DEFICIT = "CONTRIBUTION_GAP_DEFICIT"
+
+
+class ProfitabilityAttributionConfig(BaseModel):
+    """Configuration parameters for Profitability Attribution & Margin Drivers."""
+
+    model_config = ConfigDict(extra="allow")
+
+    low_margin_threshold: float = Field(
+        default=0.20, ge=0.0, le=1.0, description="Gross margin percentage below which a segment is flagged LOW_MARGIN"
+    )
+    high_discount_threshold: float = Field(
+        default=0.20, ge=0.0, le=1.0, description="Discount rate above which a segment is flagged HIGH_DISCOUNT"
+    )
+    contribution_gap_threshold: float = Field(
+        default=0.02, ge=0.0, description="Contribution gap threshold (margin_share - rev_share) to flag disparity"
+    )
+    concentration_percentiles: List[float] = Field(
+        default_factory=lambda: [0.01, 0.05, 0.10, 0.20],
+        description="Top concentration percentiles to evaluate (e.g. 1%, 5%, 10%, 20%)",
+    )
+    discount_bucket_boundaries: List[Tuple[float, float, str]] = Field(
+        default_factory=lambda: [
+            (0.0, 0.0, "0%"),
+            (0.0, 0.05, "0-5%"),
+            (0.05, 0.10, "5-10%"),
+            (0.10, 0.20, "10-20%"),
+            (0.20, 0.30, "20-30%"),
+            (0.30, 1.00, "30%+"),
+        ],
+        description="List of (min_rate, max_rate, label) tuples defining discount rate buckets",
+    )
+    as_of_date: Optional[Union[str, date]] = Field(
+        default=None, description="Point-in-time historical cutoff date"
+    )
+    default_currency: str = Field(default="USD", description="Default expected ISO currency code")
+    allow_multi_currency: bool = Field(
+        default=False, description="Whether to allow multi-currency aggregation without explicit FX conversion"
+    )
+
+    def to_dict(self) -> Dict[str, Any]:
+        return self.model_dump()
+
+
+class ProfitabilityAttributionRecord(BaseModel):
+    """Factual profitability attribution metrics for any dimensional slice."""
+
+    model_config = ConfigDict(extra="allow")
+
+    dimension: str = Field(..., description="Attribution dimension (SKU, CATEGORY, CHANNEL, WAREHOUSE, etc.)")
+    segment_key: str = Field(..., description="Segment identifier (e.g. SKU_001, CH_AMZ, WH_EAST)")
+    record_count: int = Field(default=0, ge=0, description="Order-line transactions count")
+    order_count: int = Field(default=0, ge=0, description="Distinct sales orders count")
+    total_units: int = Field(default=0, ge=0, description="Physical units sold")
+    gross_revenue: Optional[float] = Field(default=None, description="Gross revenue: quantity * unit_price")
+    discount: Optional[float] = Field(default=None, description="Promotional discount")
+    net_revenue: Optional[float] = Field(default=None, description="Net realized revenue: gross_revenue - discount")
+    product_cost: Optional[float] = Field(default=None, description="Standard procurement product cost")
+    gross_margin: Optional[float] = Field(default=None, description="Gross margin: net_revenue - product_cost")
+    gross_margin_pct: Optional[float] = Field(default=None, description="Gross margin %: gross_margin / net_revenue")
+    revenue_contribution_pct: Optional[float] = Field(
+        default=None, description="Segment net revenue share of portfolio net revenue"
+    )
+    margin_contribution_pct: Optional[float] = Field(
+        default=None, description="Segment gross margin share of portfolio gross margin"
+    )
+    contribution_gap: Optional[float] = Field(
+        default=None, description="margin_contribution_pct - revenue_contribution_pct"
+    )
+    absolute_contribution_gap: Optional[float] = Field(
+        default=None, description="abs(contribution_gap)"
+    )
+    discount_rate: Optional[float] = Field(
+        default=None, description="Discount rate: discount / gross_revenue"
+    )
+    margin_per_unit: Optional[float] = Field(
+        default=None, description="Gross margin / total_units"
+    )
+    revenue_per_unit: Optional[float] = Field(
+        default=None, description="Net revenue / total_units"
+    )
+    product_cost_per_unit: Optional[float] = Field(
+        default=None, description="Product cost / total_units"
+    )
+    known_variable_cost: Optional[float] = Field(
+        default=None, description="Total known variable expenses from Phase 6B if observed"
+    )
+    known_contribution_margin: Optional[float] = Field(
+        default=None, description="Known contribution margin: net_revenue - product_cost - known_var_costs"
+    )
+    known_contribution_margin_pct: Optional[float] = Field(
+        default=None, description="Known contribution margin %: known_cm / net_revenue"
+    )
+    average_order_value: Optional[float] = Field(
+        default=None, description="Net revenue / distinct order_count"
+    )
+    currency: str = Field(default="USD", description="Currency denomination")
+
+    def to_dict(self) -> Dict[str, Any]:
+        d = self.model_dump()
+        for k in [
+            "gross_revenue", "discount", "net_revenue", "product_cost", "gross_margin",
+            "gross_margin_pct", "revenue_contribution_pct", "margin_contribution_pct",
+            "contribution_gap", "absolute_contribution_gap", "discount_rate",
+            "margin_per_unit", "revenue_per_unit", "product_cost_per_unit",
+            "known_variable_cost", "known_contribution_margin", "known_contribution_margin_pct",
+            "average_order_value",
+        ]:
+            if d.get(k) is not None:
+                d[k] = round(float(d[k]), 4 if "pct" in k or "gap" in k or "rate" in k else 2)
+        return d
+
+
+class SKUProfitabilityProfile(BaseModel):
+    """Reusable comprehensive profitability profile for an individual SKU."""
+
+    model_config = ConfigDict(extra="allow")
+
+    sku_id: str = Field(..., description="Unique product SKU ID")
+    product_name: Optional[str] = Field(default=None, description="Catalog product description")
+    category_id: Optional[str] = Field(default=None, description="Category classification")
+    brand: Optional[str] = Field(default=None, description="Brand name")
+    total_units: int = Field(default=0, ge=0, description="Total physical units sold")
+    order_count: int = Field(default=0, ge=0, description="Distinct customer orders count")
+    gross_revenue: Optional[float] = Field(default=None, description="Gross revenue")
+    discount: Optional[float] = Field(default=None, description="Promotional discount")
+    net_revenue: Optional[float] = Field(default=None, description="Net realized revenue")
+    product_cost: Optional[float] = Field(default=None, description="Standard procurement product cost")
+    gross_margin: Optional[float] = Field(default=None, description="Gross margin")
+    gross_margin_pct: Optional[float] = Field(default=None, description="Gross margin %")
+    margin_per_unit: Optional[float] = Field(default=None, description="Gross margin / total_units")
+    revenue_per_unit: Optional[float] = Field(default=None, description="Net revenue / total_units")
+    product_cost_per_unit: Optional[float] = Field(default=None, description="Product cost / total_units")
+    discount_rate: Optional[float] = Field(default=None, description="discount / gross_revenue")
+    revenue_contribution_pct: Optional[float] = Field(default=None, description="SKU share of portfolio revenue")
+    margin_contribution_pct: Optional[float] = Field(default=None, description="SKU share of portfolio margin")
+    contribution_gap: Optional[float] = Field(default=None, description="margin_contribution_pct - revenue_contribution_pct")
+    driver_classifications: List[MarginDriverClassification] = Field(
+        default_factory=list, description="Assigned margin driver classifications"
+    )
+    reason_codes: List[AttributionReasonCode] = Field(
+        default_factory=list, description="Descriptive attribution reason codes"
+    )
+    economics_status: Optional[str] = Field(default=None, description="Phase 6B unit economics status")
+    known_variable_cost: Optional[float] = Field(default=None, description="Known variable costs if available")
+    known_contribution_margin: Optional[float] = Field(default=None, description="Known contribution margin")
+    cost_completeness_pct: Optional[float] = Field(default=None, description="Cost component completeness %")
+    currency: str = Field(default="USD", description="Currency denomination")
+
+    def to_dict(self) -> Dict[str, Any]:
+        d = self.model_dump()
+        for k in [
+            "gross_revenue", "discount", "net_revenue", "product_cost", "gross_margin",
+            "gross_margin_pct", "margin_per_unit", "revenue_per_unit", "product_cost_per_unit",
+            "discount_rate", "revenue_contribution_pct", "margin_contribution_pct",
+            "contribution_gap", "known_variable_cost", "known_contribution_margin", "cost_completeness_pct",
+        ]:
+            if d.get(k) is not None:
+                d[k] = round(float(d[k]), 4 if "pct" in k or "gap" in k or "rate" in k else 2)
+        return d
+
+
+class MarginContributionPoint(BaseModel):
+    """Ranked data point on the cumulative margin contribution curve."""
+
+    model_config = ConfigDict(extra="allow")
+
+    rank: int = Field(..., ge=1, description="1-indexed segment contribution rank")
+    segment_id: str = Field(..., description="Segment identifier (e.g. SKU ID)")
+    segment_dimension: str = Field(default="SKU", description="Dimension type")
+    segment_margin: float = Field(..., description="Segment gross margin ($)")
+    segment_revenue: float = Field(..., description="Segment net revenue ($)")
+    margin_contribution_pct: float = Field(..., description="Segment margin share of portfolio total")
+    revenue_contribution_pct: float = Field(..., description="Segment revenue share of portfolio total")
+    cumulative_margin_contribution_pct: float = Field(..., description="Running cumulative margin contribution")
+    cumulative_revenue_contribution_pct: float = Field(..., description="Running cumulative revenue contribution")
+
+    def to_dict(self) -> Dict[str, Any]:
+        d = self.model_dump()
+        d["segment_margin"] = round(float(d["segment_margin"]), 2)
+        d["segment_revenue"] = round(float(d["segment_revenue"]), 2)
+        d["margin_contribution_pct"] = round(float(d["margin_contribution_pct"]), 4)
+        d["revenue_contribution_pct"] = round(float(d["revenue_contribution_pct"]), 4)
+        d["cumulative_margin_contribution_pct"] = round(float(d["cumulative_margin_contribution_pct"]), 4)
+        d["cumulative_revenue_contribution_pct"] = round(float(d["cumulative_revenue_contribution_pct"]), 4)
+        return d
+
+
+class MarginConcentrationTier(BaseModel):
+    """Concentration summary for a specific top percentile tier of contributors."""
+
+    model_config = ConfigDict(extra="allow")
+
+    percentile: float = Field(..., description="Percentile fraction (e.g. 0.01 for 1%, 0.05 for 5%)")
+    tier_label: str = Field(..., description="Descriptive label (e.g. 'Top 1%', 'Top 5%')")
+    segment_count: int = Field(..., ge=0, description="Total segments evaluated in cohort")
+    top_n_count: int = Field(..., ge=0, description="Count of top segments in this tier")
+    cumulative_margin_contribution_pct: float = Field(
+        ..., description="Cumulative share of portfolio gross margin generated by tier"
+    )
+    cumulative_revenue_contribution_pct: float = Field(
+        ..., description="Cumulative share of portfolio net revenue generated by tier"
+    )
+    cumulative_gross_margin: float = Field(..., description="Total gross margin generated by tier ($)")
+    cumulative_net_revenue: float = Field(..., description="Total net revenue generated by tier ($)")
+
+    def to_dict(self) -> Dict[str, Any]:
+        d = self.model_dump()
+        d["cumulative_margin_contribution_pct"] = round(float(d["cumulative_margin_contribution_pct"]), 4)
+        d["cumulative_revenue_contribution_pct"] = round(float(d["cumulative_revenue_contribution_pct"]), 4)
+        d["cumulative_gross_margin"] = round(float(d["cumulative_gross_margin"]), 2)
+        d["cumulative_net_revenue"] = round(float(d["cumulative_net_revenue"]), 2)
+        return d
+
+
+class MarginConcentrationResult(BaseModel):
+    """Consolidated portfolio concentration analysis across defined percentiles."""
+
+    model_config = ConfigDict(extra="allow")
+
+    dimension: str = Field(default="SKU", description="Dimension evaluated (e.g. SKU)")
+    total_segments: int = Field(..., ge=0, description="Total distinct segments evaluated")
+    total_portfolio_margin: float = Field(..., description="Portfolio gross margin ($)")
+    total_portfolio_revenue: float = Field(..., description="Portfolio net revenue ($)")
+    tiers: List[MarginConcentrationTier] = Field(default_factory=list, description="Concentration tiers")
+
+    def to_dict(self) -> Dict[str, Any]:
+        return self.model_dump()
+
+
+class DiscountBucketMetric(BaseModel):
+    """Aggregated financial performance metrics within a specific discount rate bucket."""
+
+    model_config = ConfigDict(extra="allow")
+
+    bucket_label: str = Field(..., description="Bucket label (e.g. '0%', '0-5%', '5-10%', '10-20%', '20-30%', '30%+')")
+    min_discount_rate: float = Field(..., ge=0.0, description="Lower bound of discount rate (inclusive for 0%, exclusive otherwise)")
+    max_discount_rate: float = Field(..., ge=0.0, description="Upper bound of discount rate (inclusive)")
+    transaction_count: int = Field(default=0, ge=0, description="Order-line count in bucket")
+    total_units: int = Field(default=0, ge=0, description="Physical units sold in bucket")
+    total_gross_revenue: float = Field(default=0.0, description="Gross revenue in bucket ($)")
+    total_discount: float = Field(default=0.0, description="Total discount granted in bucket ($)")
+    total_net_revenue: float = Field(default=0.0, description="Net realized revenue in bucket ($)")
+    total_product_cost: float = Field(default=0.0, description="Standard procurement product cost in bucket ($)")
+    total_gross_margin: float = Field(default=0.0, description="Gross margin in bucket ($)")
+    gross_margin_pct: Optional[float] = Field(default=None, description="Gross margin % in bucket")
+    margin_per_unit: Optional[float] = Field(default=None, description="Gross margin per unit in bucket")
+    discount_margin_impact: float = Field(default=0.0, description="Margin reduction directly attributable to discount (-discount)")
+    currency: str = Field(default="USD", description="Currency denomination")
+
+    def to_dict(self) -> Dict[str, Any]:
+        d = self.model_dump()
+        for k in [
+            "total_gross_revenue", "total_discount", "total_net_revenue", "total_product_cost",
+            "total_gross_margin", "gross_margin_pct", "margin_per_unit", "discount_margin_impact",
+        ]:
+            if d.get(k) is not None:
+                d[k] = round(float(d[k]), 4 if "pct" in k else 2)
+        return d
+
+
+class DiscountImpactSummary(BaseModel):
+    """Executive summary of promotional discount impact on portfolio margins."""
+
+    model_config = ConfigDict(extra="allow")
+
+    total_gross_revenue: float = Field(default=0.0, description="Total portfolio gross revenue ($)")
+    total_discount: float = Field(default=0.0, description="Total portfolio promotional discounts ($)")
+    discount_rate: float = Field(default=0.0, description="Portfolio aggregate discount rate: discount / gross_revenue")
+    total_net_revenue: float = Field(default=0.0, description="Total portfolio net revenue ($)")
+    margin_before_discount: float = Field(default=0.0, description="gross_revenue - product_cost ($)")
+    margin_after_discount: float = Field(default=0.0, description="net_revenue - product_cost ($)")
+    discount_margin_impact: float = Field(
+        default=0.0, description="Direct margin reduction from discount: margin_after - margin_before = -discount ($)"
+    )
+    buckets: List[DiscountBucketMetric] = Field(default_factory=list, description="Performance broken down by discount rate bucket")
+    currency: str = Field(default="USD", description="Currency denomination")
+
+    def to_dict(self) -> Dict[str, Any]:
+        d = self.model_dump()
+        for k in [
+            "total_gross_revenue", "total_discount", "discount_rate", "total_net_revenue",
+            "margin_before_discount", "margin_after_discount", "discount_margin_impact",
+        ]:
+            d[k] = round(float(d[k]), 4 if "rate" in k else 2)
+        return d
+
+
+class MarginDriverSegment(BaseModel):
+    """Segment classified under a deterministic margin driver category."""
+
+    model_config = ConfigDict(extra="allow")
+
+    segment_dimension: str = Field(..., description="Dimension: SKU, CHANNEL, WAREHOUSE, etc.")
+    segment_key: str = Field(..., description="Segment identifier (e.g. SKU_001, CH_AMZ)")
+    driver_classification: MarginDriverClassification = Field(..., description="Assigned driver category")
+    gross_margin: float = Field(..., description="Realized gross margin ($)")
+    net_revenue: float = Field(..., description="Realized net revenue ($)")
+    gross_margin_pct: Optional[float] = Field(default=None, description="Gross margin %")
+    revenue_contribution_pct: Optional[float] = Field(default=None, description="Revenue share of portfolio")
+    margin_contribution_pct: Optional[float] = Field(default=None, description="Margin share of portfolio")
+    contribution_gap: Optional[float] = Field(default=None, description="margin_contribution_pct - revenue_contribution_pct")
+    reason_codes: List[AttributionReasonCode] = Field(default_factory=list, description="Triggered descriptive reason codes")
+    description: str = Field(..., description="Descriptive factual explanation of classification")
+
+    def to_dict(self) -> Dict[str, Any]:
+        d = self.model_dump()
+        d["gross_margin"] = round(float(d["gross_margin"]), 2)
+        d["net_revenue"] = round(float(d["net_revenue"]), 2)
+        if d.get("gross_margin_pct") is not None:
+            d["gross_margin_pct"] = round(float(d["gross_margin_pct"]), 4)
+        if d.get("revenue_contribution_pct") is not None:
+            d["revenue_contribution_pct"] = round(float(d["revenue_contribution_pct"]), 4)
+        if d.get("margin_contribution_pct") is not None:
+            d["margin_contribution_pct"] = round(float(d["margin_contribution_pct"]), 4)
+        if d.get("contribution_gap") is not None:
+            d["contribution_gap"] = round(float(d["contribution_gap"]), 4)
+        return d
+
+
+class MarginWaterfallStage(BaseModel):
+    """An individual numerical stage in the portfolio commercial margin waterfall."""
+
+    model_config = ConfigDict(extra="allow")
+
+    stage_name: str = Field(..., description="Stage title (e.g. Gross Revenue, Discounts, Net Revenue, COGS, etc.)")
+    stage_order: int = Field(..., ge=1, description="Sequential sequence index")
+    amount: Optional[float] = Field(default=None, description="Monetary value of stage ($)")
+    percentage_of_gross_revenue: Optional[float] = Field(
+        default=None, description="Stage amount as percentage of gross revenue"
+    )
+    stage_type: str = Field(..., description="Stage classification: SUBTOTAL, DEDUCTION, RESULT")
+    description: str = Field(..., description="Descriptive definition of stage calculation")
+
+    def to_dict(self) -> Dict[str, Any]:
+        d = self.model_dump()
+        if d.get("amount") is not None:
+            d["amount"] = round(float(d["amount"]), 2)
+        if d.get("percentage_of_gross_revenue") is not None:
+            d["percentage_of_gross_revenue"] = round(float(d["percentage_of_gross_revenue"]), 4)
+        return d
+
+
+class MarginWaterfall(BaseModel):
+    """Executive portfolio margin waterfall representing economic progression from gross revenue to margin."""
+
+    model_config = ConfigDict(extra="allow")
+
+    stages: List[MarginWaterfallStage] = Field(default_factory=list, description="Ordered waterfall stages")
+    gross_revenue: float = Field(default=0.0, description="Gross revenue ($)")
+    discount: float = Field(default=0.0, description="Promotional discount deduction ($)")
+    net_revenue: float = Field(default=0.0, description="Net realized revenue ($)")
+    product_cost: float = Field(default=0.0, description="Standard procurement product cost deduction ($)")
+    gross_margin: float = Field(default=0.0, description="Gross commercial margin ($)")
+    known_variable_costs: float = Field(default=0.0, description="Total known variable expenses deduction ($)")
+    known_contribution_margin: float = Field(default=0.0, description="Known contribution margin ($)")
+    final_contribution_margin: Optional[float] = Field(
+        default=None, description="Final contribution margin (None when cost components are unavailable)"
+    )
+    currency: str = Field(default="USD", description="Currency denomination")
+
+    def to_dict(self) -> Dict[str, Any]:
+        d = self.model_dump()
+        for k in [
+            "gross_revenue", "discount", "net_revenue", "product_cost", "gross_margin",
+            "known_variable_costs", "known_contribution_margin",
+        ]:
+            d[k] = round(float(d[k]), 2)
+        if d.get("final_contribution_margin") is not None:
+            d["final_contribution_margin"] = round(float(d["final_contribution_margin"]), 2)
+        return d
+
+
+class ProfitabilityAttributionResult(BaseModel):
+    """Consolidated container for complete Phase 6C Profitability Attribution outputs."""
+
+    model_config = ConfigDict(extra="allow")
+
+    portfolio_attribution: ProfitabilityAttributionRecord = Field(
+        ..., description="Overall network profitability attribution metrics"
+    )
+    dimension_attributions: Dict[str, List[ProfitabilityAttributionRecord]] = Field(
+        default_factory=dict, description="Attribution records partitioned by dimension"
+    )
+    sku_profiles: List[SKUProfitabilityProfile] = Field(
+        default_factory=list, description="Comprehensive SKU-level profitability profiles"
+    )
+    margin_concentration: MarginConcentrationResult = Field(
+        ..., description="Portfolio margin and revenue concentration analysis"
+    )
+    contribution_curve: List[MarginContributionPoint] = Field(
+        default_factory=list, description="Ordered cumulative margin contribution curve data"
+    )
+    discount_impact: DiscountImpactSummary = Field(
+        ..., description="Comprehensive promotional discount impact analysis and bucket breakdown"
+    )
+    margin_drivers: List[MarginDriverSegment] = Field(
+        default_factory=list, description="Segments classified under deterministic margin driver categories"
+    )
+    margin_waterfall: MarginWaterfall = Field(
+        ..., description="Portfolio margin waterfall progression"
+    )
+    time_attributions: List[ProfitabilityAttributionRecord] = Field(
+        default_factory=list, description="Temporal profitability attribution series"
+    )
+    data_quality_report: FinancialDataQualityReport = Field(
+        ..., description="Data quality validation audit report"
+    )
+    currency: str = Field(default="USD", description="Currency denomination")
+    as_of_date: Optional[str] = Field(default=None, description="Point-in-time filter applied if any")
+    generated_at: str = Field(..., description="ISO 8601 generation timestamp")
+
+    def to_dict(self) -> Dict[str, Any]:
+        return self.model_dump()
