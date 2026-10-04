@@ -12,7 +12,7 @@ The platform is built to answer questions such as:
 
 ---
 
-## What is implemented today
+## What is implemented
 
 This codebase now covers the full operational intelligence lifecycle, not just data validation and forecasting.
 
