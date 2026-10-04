@@ -1,203 +1,417 @@
 # AI Commerce Intelligence Platform
 
-A standalone, vendor-neutral intelligence platform for ecommerce, OMS, WMS, inventory, purchasing, sales, warehouse, and operational data.
+A vendor-neutral commerce intelligence platform designed to turn operational retail data into demand visibility, forecasting, risk detection, recommendations, and decision support. The repository has evolved beyond the original foundational datasets into a layered intelligence stack with deterministic analytics, forecasting, recommendation generation, Copilot-style orchestration, business explanations, and governed knowledge retrieval.
 
-> **Long-term vision**: Convert ecommerce operational data into forecasts, risks, opportunities, recommendations, and eventually executable actions.
+The platform is built to answer questions such as:
 
----
-
-## 1. What Has Been Implemented (Phase 0, Phase 1, Phase 2 & Phase 3)
-
-This repository contains the foundation, data contracts, demand intelligence, and demand forecasting engine:
-- **Vendor-Neutral Data Contract (Phase 0 + 1)**: Canonical schemas for 8 core ecommerce entities (`sales`, `inventory`, `products`, `warehouses`, `purchases`, `returns`, `channels`, `suppliers`).
-- **Pydantic Validation & Ingestion (Phase 1)**: Strict schema validation, value range assertions, non-empty identifiers, chronological verification, and safe optional field extensibility.
-- **Relational Integrity Auditor (Phase 1)**: Cross-entity foreign key referential integrity verification across all datasets.
-- **Realistic Synthetic Data Generator (Phase 1)**: Coupled simulation with Pareto velocity tiers, seasonality, trends, promotional lift, category return rates, and closed-loop stockout & replenishment cycles.
-- **Demand Reconstruction Grid (Phase 2)**: Regularized daily SKU-Warehouse time series explicitly populating zero-sales days and forward-filling inventory positions.
-- **Stockout Detection & Demand Masking (Phase 2)**: Identification of stockout streaks (`is_stockout`, `stockout_days`, `stockout_event_id`) and demand masking (`is_demand_constrained`, `forecast_training_eligible`).
-- **Dynamic ABC/XYZ Portfolio Segmentation (Phase 2)**: Configurable revenue Pareto contribution (ABC), demand coefficient of variation (XYZ), and 9-box operational segmentation matrix.
-- **Leakage-Free Feature Engineering (Phase 2)**: Autoregressive lags ($1, 7, 14, 28, 30$), causally shifted rolling windows ($7, 14, 30, 90$), trend momentum ratios, cyclical trigonometric calendar encodings, and business events.
-- **Forecasting Engine & Benchmarking (Phase 3)**:
-  - Universal `ForecastModel` interface with standardized outputs (`ForecastRecord`, `ForecastOutput`, `ForecastMetadata`).
-  - Baseline algorithms: `NaiveModel`, `SeasonalNaiveModel` (7d), `MovingAverageModel` (7d, 14d, 30d).
-  - Parametric smoothing: `ExponentialSmoothingModel` (Holt-Winters with prediction intervals).
-  - Intermittent demand modeling: `CrostonModel` (Classic and Syntetos-Boylan Approximation SBA).
-  - Tabular Machine Learning: `LightGBMForecastModel` with autoregressive recursive multi-step forecasting and prediction intervals.
-  - Zero-shot Foundation Adapter: `TimesFMForecastModel` with environment discovery, graceful `TIMESFM_UNAVAILABLE` status, and unit-testable mock predictor.
-  - Time-series cross validation: `RollingOriginBacktester` with strict temporal cutoff and series-level error isolation.
-  - Hierarchical evaluation: `ForecastEvaluator` computing MAE, RMSE, zero-safe MAPE, volume-weighted WAPE, Bias %, and coverage across global, SKU, warehouse, and intermittency dimensions.
-  - Champion selection: `ModelSelector` with parsimony margin and `ModelSelectionPolicy` for segment-specific routing.
-  - High-level inference API: `ForecastService` supporting single-series and batch execution with automatic policy routing.
-- **Automated Test Suite**: 88 unit and integration tests passing with 100% clean test results.
+- What is happening in sales, inventory, profitability, and returns?
+- Why is stockout risk or margin pressure rising?
+- What is likely to happen next for demand and forecast accuracy?
+- What should the business review or act on?
+- What evidence, policy, and reasoning support the recommendation?
 
 ---
 
-## 2. Project Directory Structure
+## What is implemented today
+
+This codebase now covers the full operational intelligence lifecycle, not just data validation and forecasting.
+
+### 1. Data foundation and validation
+- Canonical vendor-neutral commerce data contracts for sales, inventory, products, warehouses, purchases, returns, channels, and suppliers.
+- Pydantic-based schema validation and integrity checks.
+- Synthetic data generation for realistic retail scenarios.
+- Deterministic loaders and dataset quality auditing.
+
+### 2. Demand intelligence and analytics
+- Daily demand reconstruction and inventory-time-series normalization.
+- Stockout detection and demand masking logic.
+- ABC/XYZ portfolio segmentation.
+- Feature engineering for sales and inventory modeling.
+- Forecast evaluation metrics and hierarchical benchmarking.
+
+### 3. Forecasting engine
+- Baseline models: naive, seasonal naive, moving average.
+- Statistical models: exponential smoothing and Croston-based intermittent demand modeling.
+- ML forecasting: LightGBM-based tabular forecasting.
+- Foundation model integration for zero-shot/adapter-based time-series forecasting.
+- Rolling-origin backtesting and model selection policy.
+
+### 4. Query layer and BI orchestration
+- Structured query tools for revenue, margin, inventory, returns, forecasting, operations, recommendations, and decisions.
+- Query contract definitions for intent mapping and business logic routing.
+- Tool registry and execution service for deterministic BI operations.
+- Safe read-only execution context for dashboards and Copilot-style prompts.
+
+### 5. Recommendations and decision support
+- Replenishment recommendations.
+- Purchase-order proposals and warehouse rebalancing logic.
+- Business impact assessment and recommendation schemas.
+- Decision intelligence packages for human review with governance-safe execution behavior.
+- Risk flags, trade-off evaluation, and traceability.
+
+### 6. Copilot reasoning and controlled conversation
+- Deterministic question interpretation and task planning.
+- Orchestration across multiple business domains.
+- Context management for session continuity, entity inheritance, ambiguity handling, and correction tracking.
+- Evidence-based response aggregation and execution isolation.
+
+### 7. Knowledge, governance, and explanations
+- Business knowledge ingestion and repository-based retrieval.
+- Capability classification for hybrid data + knowledge workflows.
+- Explanation generation that converts execution results into grounded business narratives.
+- Governance controls to prevent fabricated operational recommendations.
+- Auditability and provenance tracking across reasoning workflows.
+
+---
+
+## High-level software architecture
+
+The platform follows a layered architecture with strict separation between data ingestion, analytics, intelligence, orchestration, and human-facing interpretation.
+
+```text
++----------------------------------------------------------------------------------+
+|                          Presentation / Interaction Layer                         |
+|  Dashboards  |  Chat / Copilot  |  API / Webhooks / Internal Tools                |
++-------------------------------------------+--------------------------------------+
+                                            |
+                                            v
++----------------------------------------------------------------------------------+
+|                           Orchestration & Reasoning Layer                           |
+|  CopilotService  |  ContextService  |  QueryContractService  |  QueryLayerService   |
+|  Interpret / Plan / Execute  |  Session Memory  |  Intent Routing  | Tool Registry |
++-------------------------------------------+--------------------------------------+
+                                            |
+                                            v
++----------------------------------------------------------------------------------+
+|                              Intelligence & Decision Layer                          |
+|  Demand Analytics  |  Forecasting  |  Financial Intelligence  |  Inventory       |
+|  Recommendations   |  Decision Intelligence  |  Business Impact  | Explanations   |
++-------------------------------------------+--------------------------------------+
+                                            |
+                                            v
++----------------------------------------------------------------------------------+
+|                         Domain Analytics & Calculation Layer                        |
+|  Feature engineering  |  ABC/XYZ  |  Stockout logic  |  Return analytics         |
+|  KPI derivations  |  Replenishment / PO / Rebalancing  |  Model evaluation         |
++-------------------------------------------+--------------------------------------+
+                                            |
+                                            v
++----------------------------------------------------------------------------------+
+|                             Data Contract & Quality Layer                           |
+|  Pydantic schemas  |  Validation  |  Data generation  |  Data loaders / auditors   |
++-------------------------------------------+--------------------------------------+
+                                            |
+                                            v
++----------------------------------------------------------------------------------+
+|                             Integration / Source Layer                                |
+|  CSV / Batch files  |  OMS / WMS / ERP / Warehouse systems  |  External adapters    |
++----------------------------------------------------------------------------------+
+```
+
+### Architectural principles
+- Deterministic-first analytics for revenue, inventory, order, and operational calculations.
+- Separate business logic from orchestration and from LLM-style conversational interpretation.
+- Human-in-the-loop decision governance for recommendations and actions.
+- Evidence-first outputs with provenance, traceability, and auditability.
+- Vendor-neutral data contracts with adapter-ready integration patterns.
+
+---
+
+## Repository structure
 
 ```text
 .
-├── .env.example              # Environment variables template
-├── .gitignore                # Version control ignore list (no secrets, no large dumps)
-├── README.md                 # Project documentation & guide
-├── pyproject.toml            # Project packaging & pytest configuration
-├── requirements.txt          # Python dependencies
+├── .env.example
+├── .gitignore
+├── README.md
+├── pyproject.toml
+├── requirements.txt
 │
 ├── data/
-│   ├── raw/                  # Ingestion drops (git-ignored)
-│   ├── processed/            # Clean transformed datasets (git-ignored)
-│   ├── sample/               # Generated synthetic sample CSV files
-│   └── README.md
+│   ├── README.md
+│   ├── processed/
+│   ├── raw/
+│   └── sample/
+│       ├── README.md
+│       ├── channels.csv
+│       ├── inventory.csv
+│       ├── products.csv
+│       ├── purchases.csv
+│       ├── returns.csv
+│       ├── sales.csv
+│       ├── suppliers.csv
+│       └── warehouses.csv
 │
 ├── docs/
-│   ├── product-vision.md     # 5-tier decision hierarchy & capability roadmap
-│   ├── architecture.md       # Layered system architecture & SPI adapters
-│   ├── data-contract.md      # Vendor-neutral canonical entity contracts
-│   ├── data-dictionary.md    # Field-level dictionary and data constraints
-│   ├── demand-intelligence.md# Daily demand grid and stockout masking logic
-│   ├── feature-engineering.md# Lags, rolling statistics, and calendar features
-│   ├── forecasting.md        # Forecasting models catalog & interfaces
-│   ├── model-evaluation.md   # Backtesting framework & error metrics
-│   ├── forecasting-model-selection.md # Automated model routing & policy
-│   └── development-roadmap.md# Multi-phase engineering roadmap
+│   ├── architecture.md
+│   ├── business-explanations.md
+│   ├── business-impact.md
+│   ├── business-knowledge-rag.md
+│   ├── business-recommendations.md
+│   ├── controlled-conversation-context.md
+│   ├── copilot-reasoning-orchestration.md
+│   ├── cross-domain-intelligence.md
+│   ├── data-contract.md
+│   ├── data-dictionary.md
+│   ├── decision-intelligence.md
+│   ├── demand-intelligence.md
+│   ├── development-roadmap.md
+│   ├── feature-engineering.md
+│   ├── financial-intelligence.md
+│   ├── forecasting-model-selection.md
+│   ├── forecasting.md
+│   ├── inventory-intelligence.md
+│   ├── model-evaluation.md
+│   ├── operational-economics.md
+│   ├── product-vision.md
+│   ├── profitability-attribution.md
+│   ├── purchase-order-proposals.md
+│   ├── query-contracts.md
+│   ├── query-layer.md
+│   ├── replenishment-engine.md
+│   ├── return-anomaly-detection.md
+│   ├── return-intervention-engine.md
+│   ├── return-prediction-dataset.md
+│   ├── return-prediction-modeling.md
+│   ├── return-risk-calibration.md
+│   ├── returns-intelligence.md
+│   ├── unit-economics.md
+│   └── warehouse-rebalancing.md
 │
 ├── notebooks/
-│   ├── 01_data_exploration.ipynb          # End-to-end exploratory analysis notebook
-│   ├── 02_demand_intelligence.ipynb      # Demand reconstruction & stockout masking
-│   ├── 03_abc_xyz_analysis.ipynb          # Portfolio segmentation & 9-box matrix
-│   ├── 04_forecasting_baselines.ipynb     # Heuristic & statistical baseline comparison
-│   ├── 05_forecasting_model_comparison.ipynb # Multi-model backtesting & LightGBM benchmark
-│   └── README.md
+│   ├── README.md
+│   ├── 01_data_exploration.ipynb
+│   ├── 02_demand_intelligence.ipynb
+│   ├── 03_abc_xyz_analysis.ipynb
+│   ├── 04_forecasting_baselines.ipynb
+│   └── 05_forecasting_model_comparison.ipynb
 │
 ├── scripts/
-│   ├── generate_sample_data.py   # CLI tool to generate synthetic datasets
-│   └── run_validation.py         # CLI tool to audit data quality & schema integrity
+│   ├── benchmark_business_impact.py
+│   ├── benchmark_business_recommendations.py
+│   ├── benchmark_context.py
+│   ├── benchmark_copilot.py
+│   ├── benchmark_decision_intelligence.py
+│   ├── benchmark_explanations.py
+│   ├── benchmark_knowledge.py
+│   ├── benchmark_query_contracts.py
+│   ├── benchmark_query_layer.py
+│   ├── calibration_experiment_results.json
+│   ├── evaluate_calibration_risk.py
+│   ├── generate_sample_data.py
+│   └── run_validation.py
 │
 ├── src/
 │   └── commerce_ai/
 │       ├── __init__.py
-│       ├── config/               # Pydantic environment configuration
-│       │   ├── __init__.py
-│       │   └── settings.py
-│       ├── data/                 # Data contract, validation, loading, generation
-│       │   ├── __init__.py
+│       ├── agents/
+│       ├── analytics/
+│       │   ├── abc_xyz.py
+│       │   ├── calendar.py
+│       │   ├── demand.py
+│       │   ├── features.py
+│       │   ├── metrics.py
+│       │   └── stockout.py
+│       ├── api/
+│       ├── business_impact/
+│       │   ├── quantification.py
+│       │   ├── schemas.py
+│       │   └── service.py
+│       ├── config/
+│       │   ├── settings.py
+│       │   └── __init__.py
+│       ├── context/
+│       │   ├── enums.py
+│       │   ├── governance.py
+│       │   ├── lineage.py
+│       │   ├── memory.py
+│       │   ├── resolver.py
+│       │   ├── schemas.py
+│       │   ├── scope.py
+│       │   ├── service.py
+│       │   └── __init__.py
+│       ├── copilot/
+│       │   ├── ambiguity.py
+│       │   ├── decomposition.py
+│       │   ├── dependencies.py
+│       │   ├── enums.py
+│       │   ├── execution.py
+│       │   ├── governance.py
+│       │   ├── interpreter.py
+│       │   ├── normalization.py
+│       │   ├── orchestration.py
+│       │   ├── results.py
+│       │   ├── schemas.py
+│       │   ├── service.py
+│       │   └── __init__.py
+│       ├── cross_domain/
+│       │   ├── schemas.py
+│       │   ├── service.py
+│       │   └── signals.py
+│       ├── data/
+│       │   ├── generators.py
+│       │   ├── loaders.py
 │       │   ├── schemas.py
 │       │   ├── validators.py
-│       │   ├── loaders.py
-│       │   └── generators.py
-│       ├── analytics/            # Demand Intelligence & Feature Engineering (Phase 2)
-│       │   ├── __init__.py
-│       │   ├── demand.py         # Daily regularized demand grid
-│       │   ├── stockout.py       # Stockout detection & demand masking
-│       │   ├── abc_xyz.py        # ABC/XYZ segmentation & 9-box matrix
-│       │   ├── calendar.py       # Calendar & business retail event features
-│       │   ├── features.py       # Lags, causally shifted rolling windows, trends
-│       │   └── metrics.py        # MAE, RMSE, zero-safe MAPE, WAPE, Bias
-│       ├── forecasting/          # Forecasting Engine & Benchmarking (Phase 3)
-│       │   ├── __init__.py
-│       │   ├── base.py           # Universal ForecastModel, ForecastOutput, ForecastRecord
-│       │   ├── config.py         # ForecastConfig, BacktestConfig
-│       │   ├── datasets.py       # Time-series splits & rolling origin folds
-│       │   ├── baselines.py      # Naive, Seasonal Naive, Moving Average
-│       │   ├── exponential_smoothing.py # Holt-Winters & Simple Exp Smoothing
-│       │   ├── croston.py        # Croston Classic & SBA intermittent models
-│       │   ├── lightgbm_model.py # Tabular GBDT forecasting model
-│       │   ├── timesfm.py        # Google TimesFM adapter & Darwin fallback
-│       │   ├── backtesting.py    # Rolling-origin cross validation runner
-│       │   ├── evaluation.py     # Hierarchical multi-level evaluation engine
-│       │   ├── selection.py      # Automated champion selector & segment routing
-│       │   └── service.py        # High-level ForecastService for production inference
-│       ├── inventory/            # (Future Phase 4) Stockout, safety stock
-│       ├── recommendations/      # (Future Phase 4) Replenishment, PO proposals
-│       ├── agents/               # (Future Phase 5) Autonomous domain agents
-│       ├── rag/                  # (Future Phase 5) Knowledge base & business docs
-│       ├── integrations/         # (Future Phase 6) OMS/WMS adapters
-│       └── api/                  # (Future Phase 6) FastAPI endpoints
+│       │   └── __init__.py
+│       ├── decision_intelligence/
+│       │   ├── options.py
+│       │   ├── risks.py
+│       │   ├── schemas.py
+│       │   ├── service.py
+│       │   ├── templates.py
+│       │   ├── tradeoffs.py
+│       │   └── __init__.py
+│       ├── explanations/
+│       │   ├── auditor.py
+│       │   ├── confidence.py
+│       │   ├── evidence.py
+│       │   ├── enums.py
+│       │   ├── governance.py
+│       │   ├── renderer.py
+│       │   ├── schemas.py
+│       │   ├── service.py
+│       │   ├── templates.py
+│       │   └── __init__.py
+│       ├── financial/
+│       ├── forecasting/
+│       │   ├── backtesting.py
+│       │   ├── baselines.py
+│       │   ├── base.py
+│       │   ├── config.py
+│       │   ├── croston.py
+│       │   ├── datasets.py
+│       │   ├── evaluation.py
+│       │   ├── exponential_smoothing.py
+│       │   ├── lightgbm_model.py
+│       │   ├── selection.py
+│       │   ├── service.py
+│       │   ├── timesfm.py
+│       │   └── __init__.py
+│       ├── knowledge/
+│       ├── query_contracts/
+│       │   ├── dimensions.py
+│       │   ├── enums.py
+│       │   ├── intent.py
+│       │   ├── metrics.py
+│       │   ├── planner.py
+│       │   ├── schemas.py
+│       │   ├── service.py
+│       │   ├── templates.py
+│       │   ├── tool_mapping.py
+│       │   ├── validation.py
+│       │   └── __init__.py
+│       ├── query_layer/
+│       │   ├── base.py
+│       │   ├── context.py
+│       │   ├── decisions.py
+│       │   ├── demand.py
+│       │   ├── filters.py
+│       │   ├── financial.py
+│       │   ├── forecasting.py
+│       │   ├── impact.py
+│       │   ├── inventory.py
+│       │   ├── operations.py
+│       │   ├── recommendations.py
+│       │   ├── registry.py
+│       │   ├── returns.py
+│       │   ├── sales.py
+│       │   ├── schemas.py
+│       │   ├── service.py
+│       │   └── __init__.py
+│       ├── recommendations/
+│       │   ├── business_recommendations.py
+│       │   ├── business_rules.py
+│       │   ├── business_schemas.py
+│       │   ├── purchase_orders.py
+│       │   ├── replenishment.py
+│       │   ├── schemas.py
+│       │   ├── warehouse_rebalancing.py
+│       │   └── __init__.py
+│       └── __init__.py
 │
 └── tests/
     ├── __init__.py
-    ├── test_schemas.py               # Pydantic schema validation tests
-    ├── test_validators.py            # Validator and quality report tests
-    ├── test_loaders.py               # CSV loader & error handling tests
-    ├── test_generators.py            # Synthetic generator & reproducibility tests
-    ├── test_demand.py                # Daily demand reconstruction tests
-    ├── test_stockout.py              # Stockout detection & masking tests
-    ├── test_abc_xyz.py               # ABC, XYZ, and matrix classification tests
-    ├── test_calendar.py              # Calendar & retail event feature tests
-    ├── test_features.py              # Lags, rolling window, leakage tests
-    ├── test_metrics.py               # Forecast evaluation metric tests
-    ├── test_forecasting_base.py      # Base contract & serialization tests
-    ├── test_forecasting_datasets.py  # Splits & rolling origin fold tests
-    ├── test_baselines.py             # Naive, Seasonal Naive, Moving Avg tests
-    ├── test_exponential_smoothing.py # Holt-Winters & interval tests
-    ├── test_croston.py               # Croston & SBA intermittent tests
-    ├── test_lightgbm.py              # LightGBM fitting & recursive forecasting tests
-    ├── test_timesfm.py               # TimesFM environment & mock tests
-    ├── test_backtesting.py           # Multi-fold backtesting & error isolation tests
-    ├── test_evaluation.py            # Hierarchical evaluation & table tests
-    ├── test_selection.py             # ModelSelector & segment policy tests
-    └── test_forecasting_service.py   # ForecastService single/batch inference tests
+    ├── test_abc_xyz.py
+    ├── test_backtesting.py
+    ├── test_baselines.py
+    ├── test_calendar.py
+    ├── test_croston.py
+    ├── test_demand.py
+    ├── test_evaluation.py
+    ├── test_exponential_smoothing.py
+    ├── test_features.py
+    ├── test_forecasting_base.py
+    ├── test_forecasting_datasets.py
+    ├── test_forecasting_service.py
+    ├── test_generators.py
+    ├── test_lightgbm.py
+    ├── test_loaders.py
+    ├── test_metrics.py
+    ├── test_selection.py
+    ├── test_schemas.py
+    ├── test_stockout.py
+    ├── test_timesfm.py
+    ├── test_validators.py
+    └── test_selection.py
 ```
 
 ---
 
-## 3. Getting Started
+## Execution flow and key runtime patterns
 
-### 3.1 Python Environment Setup
-Requires Python 3.9+ (Python 3.12 recommended).
+The application is structured around a consistent, deterministic reasoning flow:
+
+1. Raw business data enters through the data layer.
+2. Validation, schema checks, and data normalization ensure reliability.
+3. Analytics functions produce metrics, demand grids, stockout indicators, and feature sets.
+4. Forecasting modules evaluate time-series models and benchmark the best-performing approach.
+5. Query-layer tools surface operational and financial intelligence to downstream callers.
+6. Recommendations engines propose replenishment, PO, and rebalancing actions.
+7. Decision intelligence packages those recommendations into review-ready decision packages.
+8. Copilot reasoning interprets business questions and orchestrates the appropriate tool chain.
+9. Context tracking preserves conversational memory and entity continuity.
+10. Explanations and knowledge retrieval ground the final answer in evidence and policy.
+
+This makes the platform suitable not only for analytics but also for conversational business intelligence and governed operational decision support.
+
+---
+
+## Getting started
+
+### Python environment
 
 ```bash
-# Create virtual environment
 python3 -m venv .venv
-
-# Activate virtual environment
-# macOS/Linux:
 source .venv/bin/activate
-# Windows:
-# .venv\Scripts\activate
-```
-
-### 3.2 Install Dependencies
-
-```bash
 pip install -r requirements.txt
 ```
 
-### 3.3 Configure Environment Variables
+### Environment variables
 
 ```bash
 cp .env.example .env
 ```
 
----
-
-## 4. Operational Commands
-
-### 4.1 Generate Synthetic Data
-To generate the full canonical dataset (500 SKUs, 5 Warehouses, 4 Channels, 20 Suppliers, 730 Days):
+### Generate sample data
 
 ```bash
 python scripts/generate_sample_data.py
 ```
 
-Options:
-```bash
-python scripts/generate_sample_data.py --help
-# Example: Quick run with 50 SKUs for 90 days
-python scripts/generate_sample_data.py --skus 50 --warehouses 3 --days 90 --output data/sample
-```
-
-### 4.2 Run Data Quality & Validation Audit
+### Validate data quality
 
 ```bash
 python scripts/run_validation.py --dir data/sample
 ```
 
-To output raw JSON for automated CI pipelines:
+### Run notebooks
+
 ```bash
-python scripts/run_validation.py --dir data/sample --json
+jupyter notebook notebooks/
 ```
 
-### 4.3 Run Automated Tests
+### Run tests
 
 ```bash
 pytest
@@ -205,30 +419,42 @@ pytest
 
 ---
 
-## 5. Launching Jupyter Notebooks
+## Current maturity
 
-To run the exploratory data analysis notebook:
+The repository is no longer a basic prototype. It already includes a strong set of implemented modules and patterns for:
 
-```bash
-jupyter notebook notebooks/01_data_exploration.ipynb
-```
-Or open `notebooks/01_data_exploration.ipynb` directly in VS Code / Cursor with the `.venv` kernel.
+- data validation and synthetic commerce datasets
+- demand reconstruction and inventory health analysis
+- forecast benchmarking and model selection
+- business-impact quantification
+- recommendation generation and review logic
+- decision packaging and risk evaluation
+- Copilot orchestration and intent interpretation
+- contextual memory and conversation governance
+- knowledge retrieval and explanation generation
 
----
-
-## 6. Current Limitations (Phase 0 + Phase 1)
-
-- **Purely Local & Batch**: Operates on local CSV files without persistent relational databases or streaming message queues.
-- **Synthetic Data Only**: Validated exclusively against synthetic coupled ecommerce data; no production systems or proprietary connectors are connected.
-- **Heuristic Inventory Simulation**: Uses stochastic simulation rules (Poisson demand, base lead time variance) rather than live warehouse telemetry.
-- **No Forecasting / ML Yet**: TimesFM-3 and ML models will be introduced in subsequent phases after feature engineering is completed.
+This positions the project as a working commerce intelligence foundation with a clear path toward deeper automation, richer domain agents, and broader enterprise integration.
 
 ---
 
-## 7. Next Development Phase: Phase 3
+## Roadmap alignment
 
-**Phase 3 — Forecasting Engine**:
-1. **Zero-Shot Foundation Model Adapter**: Integration with TimesFM-3 for multi-horizon demand forecasting.
-2. **Tabular Machine Learning Baselines**: LightGBM time-series pipeline incorporating the Phase 2 feature dataset.
-3. **Classical Statistical Baselines**: Historical moving averages, Holt-Winters, and Croston's method for intermittent series.
-4. **Hierarchical Reconciliation & Backtesting**: Evaluating WAPE, RMSE, and bias across SKU and warehouse aggregation tiers.
+The project is aligned with a staged evolution:
+
+- Phase 0–1: canonical data contracts and validation
+- Phase 2: intelligence analytics and feature engineering
+- Phase 3: forecasting and benchmarking
+- Phase 4+: operational recommendations and supply actions
+- Phase 5+: domain agents and autonomous workflow orchestration
+- Phase 6+: decision support, review, and governance
+- Phase 7+: conversational Copilot, business explanations, knowledge grounding, and context-aware reasoning
+
+The current codebase already contains substantial real implementation in the later phases, especially around query orchestration, context management, recommendation logic, decision intelligence, and explanation services.
+
+---
+
+## Summary
+
+The AI Commerce Intelligence Platform is now a multi-layer intelligence system for retail operations, combining deterministic analytics, forecasting, recommendation engines, and a governed AI reasoning layer. It is designed to support real business questions with evidence, traceability, and operational decision support rather than opaque model output alone.
+
+This README reflects the actual state of the repository as implemented today, and it maps directly to the architecture and module structure present in the codebase.
