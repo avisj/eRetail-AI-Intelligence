@@ -10,6 +10,42 @@ The platform is built to answer questions such as:
 - What should the business review or act on?
 - What evidence, policy, and reasoning support the recommendation?
 
+## Start here
+
+New to the project? Use the links below to get set up and explore the system quickly.
+
+- [Installation Guide](INSTALLATION.md) — full setup, environment configuration, and troubleshooting
+- [Documentation Index](docs/DOCUMENTATION_INDEX.md) — complete map of all module docs
+- [Architecture Overview](docs/architecture.md) — system design and technical structure
+- [Data Contract](docs/data-contract.md) — data schemas and validation rules
+- [Query Layer](docs/query-layer.md) — business intelligence and operational query layer
+- [Forecasting](docs/forecasting.md) — forecasting strategy and model design
+
+### Quick setup
+
+```bash
+git clone https://github.com/avisj/eRetail-AI-Intelligence.git
+cd eRetail-AI-Intelligence
+python3 -m venv .venv
+source .venv/bin/activate
+pip install --upgrade pip
+pip install -r requirements.txt
+cp .env.example .env
+python scripts/generate_sample_data.py
+python scripts/run_validation.py --dir data/sample
+pytest
+```
+
+### Suggested reading order
+
+1. [Installation Guide](INSTALLATION.md)
+2. [Architecture Overview](docs/architecture.md)
+3. [Documentation Index](docs/DOCUMENTATION_INDEX.md)
+4. [Data Contract](docs/data-contract.md)
+5. [Query Layer](docs/query-layer.md)
+6. [Forecasting](docs/forecasting.md)
+7. [Copilot Reasoning](docs/copilot-reasoning-orchestration.md)
+
 ---
 
 ## What is implemented
@@ -73,35 +109,35 @@ The platform follows a layered architecture with strict separation between data 
 |                          Presentation / Interaction Layer                         |
 |  Dashboards  |  Chat / Copilot  |  API / Webhooks / Internal Tools                |
 +-------------------------------------------+--------------------------------------+
-                                            |
-                                            v
+                                             |
+                                             v
 +----------------------------------------------------------------------------------+
 |                           Orchestration & Reasoning Layer                           |
 |  CopilotService  |  ContextService  |  QueryContractService  |  QueryLayerService   |
 |  Interpret / Plan / Execute  |  Session Memory  |  Intent Routing  | Tool Registry |
 +-------------------------------------------+--------------------------------------+
-                                            |
-                                            v
+                                             |
+                                             v
 +----------------------------------------------------------------------------------+
 |                              Intelligence & Decision Layer                          |
 |  Demand Analytics  |  Forecasting  |  Financial Intelligence  |  Inventory       |
 |  Recommendations   |  Decision Intelligence  |  Business Impact  | Explanations   |
 +-------------------------------------------+--------------------------------------+
-                                            |
-                                            v
+                                             |
+                                             v
 +----------------------------------------------------------------------------------+
 |                         Domain Analytics & Calculation Layer                        |
 |  Feature engineering  |  ABC/XYZ  |  Stockout logic  |  Return analytics         |
 |  KPI derivations  |  Replenishment / PO / Rebalancing  |  Model evaluation         |
 +-------------------------------------------+--------------------------------------+
-                                            |
-                                            v
+                                             |
+                                             v
 +----------------------------------------------------------------------------------+
 |                             Data Contract & Quality Layer                           |
 |  Pydantic schemas  |  Validation  |  Data generation  |  Data loaders / auditors   |
 +-------------------------------------------+--------------------------------------+
-                                            |
-                                            v
+                                             |
+                                             v
 +----------------------------------------------------------------------------------+
 |                             Integration / Source Layer                                |
 |  CSV / Batch files  |  OMS / WMS / ERP / Warehouse systems  |  External adapters    |
@@ -124,25 +160,9 @@ The platform follows a layered architecture with strict separation between data 
 ├── .env.example
 ├── .gitignore
 ├── README.md
-├── pyproject.toml
-├── requirements.txt
-│
-├── data/
-│   ├── README.md
-│   ├── processed/
-│   ├── raw/
-│   └── sample/
-│       ├── README.md
-│       ├── channels.csv
-│       ├── inventory.csv
-│       ├── products.csv
-│       ├── purchases.csv
-│       ├── returns.csv
-│       ├── sales.csv
-│       ├── suppliers.csv
-│       └── warehouses.csv
-│
+├── INSTALLATION.md
 ├── docs/
+│   ├── DOCUMENTATION_INDEX.md
 │   ├── architecture.md
 │   ├── business-explanations.md
 │   ├── business-impact.md
@@ -177,6 +197,21 @@ The platform follows a layered architecture with strict separation between data 
 │   ├── returns-intelligence.md
 │   ├── unit-economics.md
 │   └── warehouse-rebalancing.md
+│
+├── data/
+│   ├── README.md
+│   ├── processed/
+│   ├── raw/
+│   └── sample/
+│       ├── README.md
+│       ├── channels.csv
+│       ├── inventory.csv
+│       ├── products.csv
+│       ├── purchases.csv
+│       ├── returns.csv
+│       ├── sales.csv
+│       ├── suppliers.csv
+│       └── warehouses.csv
 │
 ├── notebooks/
 │   ├── README.md
@@ -449,12 +484,12 @@ The project is aligned with a staged evolution:
 - Phase 6+: decision support, review, and governance
 - Phase 7+: conversational Copilot, business explanations, knowledge grounding, and context-aware reasoning
 
-The current codebase already contains substantial real implementation in the later phases, especially around query orchestration, context management, recommendation logic, decision intelligence, and explanation services.
+The current codebase already contains substantial real implementation in the later phases, especially around query orchestration, context management, recommendation logic, decision intelligence, and explanation generation.
 
 ---
 
 ## Summary
 
-The AI Commerce Intelligence Platform is now a multi-layer intelligence system for retail operations, combining deterministic analytics, forecasting, recommendation engines, and a governed AI reasoning layer. It is designed to support real business questions with evidence, traceability, and operational decision support rather than opaque model output alone.
+The AI Commerce Intelligence Platform is now a multi-layer intelligence system for retail operations, combining deterministic analytics, forecasting, recommendation engines, and a governed AI reasoning layer.
 
 This README reflects the actual state of the repository as implemented today, and it maps directly to the architecture and module structure present in the codebase.
